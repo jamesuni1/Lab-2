@@ -4,56 +4,111 @@
 int main()
 {
     DigitalIn enterButton(BUTTON1);
-    DigitalIn gasDetector(D2);
-    DigitalIn overTempDetector(D3);
-    DigitalIn aButton(D4);
-    DigitalIn bButton(D5);
-    DigitalIn cButton(D6);
-    DigitalIn dButton(D7);
+    DigitalIn Button0(D2);
+    DigitalIn Button1(D3);
+    DigitalIn Button2(D4);
+    DigitalIn Button3(D5);
+    DigitalIn Button4(D6);
+    DigitalIn Button5(D7);
 
-    DigitalOut alarmLed(LED1);
-    DigitalOut incorrectCodeLed(LED3);
-    DigitalOut systemBlockedLed(LED2);
+    DigitalOut warningLed(LED3);
+    DigitalOut lockdownLed(LED2);
+    DigitalOut activeAndBlinkLed(LED1);
 
-    gasDetector.mode(PullDown);
-    overTempDetector.mode(PullDown);
-    aButton.mode(PullDown);
-    bButton.mode(PullDown);
-    cButton.mode(PullDown);
-    dButton.mode(PullDown);
+    Button0.mode(PullDown);
+    Button1.mode(PullDown);
+    Button2.mode(PullDown);
+    Button3.mode(PullDown);
+    Button4.mode(PullDown);
+    Button5.mode(PullDown);
 
-    alarmLed = OFF;
-    incorrectCodeLed = OFF;
-    systemBlockedLed = OFF;
+    int incorrectCodeCount = 0;
+    int lockdownTriggerCount = 0;
+    int timerCounter = 0;
+    int lockdownTotal = 0;
+    bool lockdownCountLed = false;
+    bool warningCleared = false;
 
-    bool alarmState = OFF;
-    int numberOfIncorrectCodes = 0;
 
     while (true) {
 
-        if ( gasDetector || overTempDetector ) {
-            alarmState = ON;
+        //WARNING ALARM STATE
+        if ( incorrectCodeCount == 3 ) {
+            activeAndBlinkLed = OFF;
+            timerCounter++;
+            // make LED slow blink for 30 seconds
+            warningLed = (timerCounter / 50) % 2;
+
+            if ( timerCounter >= 3000 ) {
+                incorrectCodeCount = 0;
+                timerCounter = 0;
+                warningLed = OFF;
+                warningCleared = true;
+            }
         }
 
-        alarmLed = alarmState;
+        //LOCKDOWN ALARM STATE
+        else if (incorrectCodeCount >= 4) {
+            timerCounter++;
+            lockdownLed = ON;
+            activeAndBlinkLed = (timerCounter / 20) % 2;
 
-        if ( numberOfIncorrectCodes < 5 ) {
-            
-            if ( aButton && bButton && cButton && dButton && !enterButton ) {
-                incorrectCodeLed = OFF;
+            if (enterButton && Button0 && Button1 && Button4 && Button5) {
+                incorrectCodeCount = 0;
+                timerCounter = 0;
+                lockdownLed = OFF;
+                lockdownCountLed = true;
             }
 
-            if ( enterButton && !incorrectCodeLed && alarmState) {
-                if ( aButton && bButton && !cButton && !dButton ) {
-                    alarmState = OFF;
-                    numberOfIncorrectCodes = 0;
+            if (timerCounter >= 6000) {
+                incorrectCodeCount = 0;
+                timerCounter = 0;
+                lockdownLed = OFF;
+                lockdownCountLed = true;
+            }
+        }
+
+        // NORMAL ALARM STATE
+        else {
+            activeAndBlinkLed = ON;
+            if (enterButton) {
+                // if correct code inputted:
+                if ( Button2 && Button3 && Button4 && Button5 && !Button0 && !Button1 ) {
+                    incorrectCodeCount = 0;
+                    warningCleared = false;
+                    activeAndBlinkLed = OFF; thread_sleep_for(200); activeAndBlinkLed = ON;
                 } else {
-                    incorrectCodeLed = ON;
-                    numberOfIncorrectCodes = numberOfIncorrectCodes + 1;
+                    // if incorrect blink warning led once
+                    warningLed = ON;
+                    thread_sleep_for(500);
+                    warningLed = OFF;
+                    if (warningCleared == true) {
+                        incorrectCodeCount = 4;
+                        warningCleared = false;
+                    } else {
+                        incorrectCodeCount++;
+                    }
+                    timerCounter = 0;
+
+                    if (incorrectCodeCount >= 4) {
+                        lockdownTotal++;
+                    }
                 }
+                while(enterButton) {thread_sleep_for(10);}
             }
-        } else {
-            systemBlockedLed = ON;
         }
+
+        if (lockdownCountLed) {
+            activeAndBlinkLed = OFF;
+            thread_sleep_for(1000);
+            for (int i =0; i < lockdownTotal; i++) {
+                lockdownLed = warningLed = activeAndBlinkLed = ON;
+                thread_sleep_for(500);
+                lockdownLed = warningLed = activeAndBlinkLed = OFF;
+                thread_sleep_for(500);
+            }
+            lockdownCountLed = false;  //reset it
+        }
+        thread_sleep_for(10);
     }
 }
